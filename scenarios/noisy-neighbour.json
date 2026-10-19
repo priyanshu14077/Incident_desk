@@ -1,0 +1,33 @@
+{
+  "name": "noisy-neighbour",
+  "description": "The analytics-export batch job starts at 13:55 on the shared database and saturates its CPU; checkout's order queries slow down and time out.",
+  "alert": {"service": "checkout", "symptom": "checkout error rate 14%", "start": "14:04"},
+  "changes": [
+    {"ts": "13:55:00", "type": "job", "service": "shopdb",
+     "detail": "scheduled job analytics-export started on shopdb (owner: data-team, schedule moved from 02:00 to 13:55 last week)"}
+  ],
+  "metric_effects": [
+    {"service": "shopdb", "metric": "cpu_pct", "start": "13:55", "ramp_min": 4, "target": 97},
+    {"service": "shopdb", "metric": "latency_p95_ms", "start": "13:56", "ramp_min": 4, "target": 450},
+    {"service": "checkout", "metric": "latency_p95_ms", "start": "13:58", "ramp_min": 4, "target": 2600},
+    {"service": "checkout", "metric": "error_rate", "start": "14:02", "ramp_min": 3, "target": 0.14},
+    {"service": "payments", "metric": "latency_p95_ms", "start": "13:58", "ramp_min": 4, "target": 320},
+    {"service": "inventory", "metric": "latency_p95_ms", "start": "13:58", "ramp_min": 4, "target": 150}
+  ],
+  "log_effects": [
+    {"service": "shopdb", "level": "WARN", "start": "13:58", "per_min": [1, 2],
+     "message": "cpu above 90% for 60s; top consumer: analytics-export"},
+    {"service": "checkout", "level": "WARN", "start": "13:57", "per_min": [5, 10],
+     "message": "slow query {ms}ms: SELECT ... FROM orders WHERE customer_id = ?"},
+    {"service": "checkout", "level": "ERROR", "start": "14:02", "per_min": [14, 22], "upstream": "shopdb",
+     "message": "order lookup failed for order {id}: query timed out after 2000ms (shopdb)"}
+  ],
+  "ground_truth": {
+    "root_cause": "The analytics-export batch job started at 13:55 on the shared database, saturating its CPU and starving checkout's queries.",
+    "service": "shopdb",
+    "trigger_ts": "13:55:00",
+    "must_mention": [["analytics-export", "batch job", "batch"], ["cpu", "database", "shopdb"]],
+    "expected_action": "Stop and reschedule the analytics-export job outside business hours",
+    "runbook": "batch-jobs"
+  }
+}

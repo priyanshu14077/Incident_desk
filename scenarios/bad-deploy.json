@@ -1,0 +1,32 @@
+{
+  "name": "bad-deploy",
+  "description": "Payments v2.4.1 shrinks the DB connection pool from 50 to 5; payments times out and checkout fails on its payment calls.",
+  "alert": {"service": "checkout", "symptom": "checkout error rate 14%", "start": "14:05"},
+  "changes": [
+    {"ts": "14:02:10", "type": "deploy", "service": "payments",
+     "detail": "deploy payments v2.4.0 -> v2.4.1 (release notes: refactor DB client configuration)"}
+  ],
+  "metric_effects": [
+    {"service": "payments", "metric": "db_connections", "start": "14:03", "ramp_min": 1, "target": 5},
+    {"service": "payments", "metric": "latency_p95_ms", "start": "14:04", "ramp_min": 2, "target": 2400},
+    {"service": "payments", "metric": "error_rate", "start": "14:05", "ramp_min": 2, "target": 0.18},
+    {"service": "checkout", "metric": "latency_p95_ms", "start": "14:05", "ramp_min": 2, "target": 1900},
+    {"service": "checkout", "metric": "error_rate", "start": "14:05", "ramp_min": 2, "target": 0.14}
+  ],
+  "log_effects": [
+    {"service": "payments", "level": "WARN", "start": "14:03", "per_min": [3, 6],
+     "message": "db pool at capacity: active=5 max=5 waiting={n}"},
+    {"service": "payments", "level": "ERROR", "start": "14:05", "per_min": [18, 28],
+     "message": "connection pool exhausted: timed out waiting for a connection after {ms}ms"},
+    {"service": "checkout", "level": "ERROR", "start": "14:05", "per_min": [14, 22], "upstream": "payments",
+     "message": "payment authorisation failed for order {id}: upstream payments returned 503"}
+  ],
+  "ground_truth": {
+    "root_cause": "The payments v2.4.1 deploy at 14:02 shrank the payments DB connection pool (max 5), exhausting it; checkout's payment calls failed.",
+    "service": "payments",
+    "trigger_ts": "14:02:10",
+    "must_mention": [["v2.4.1", "deploy"], ["pool"]],
+    "expected_action": "Roll back payments to v2.4.0",
+    "runbook": "rollback"
+  }
+}
