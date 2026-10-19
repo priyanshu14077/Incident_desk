@@ -1,0 +1,27 @@
+{
+  "name": "cert-expiry",
+  "description": "Inventory's TLS certificate expires at 14:00; checkout's stock checks fail the TLS handshake. Inventory's own metrics stay healthy because the calls never reach it.",
+  "alert": {"service": "checkout", "symptom": "checkout error rate 14%", "start": "14:01"},
+  "changes": [
+    {"ts": "14:00:00", "type": "cert", "service": "inventory",
+     "detail": "TLS certificate for inventory.shopco.internal reached notAfter (expired); no renewal recorded"}
+  ],
+  "metric_effects": [
+    {"service": "checkout", "metric": "error_rate", "start": "14:00", "ramp_min": 1, "target": 0.14},
+    {"service": "inventory", "metric": "cpu_pct", "start": "14:00", "ramp_min": 2, "target": 9}
+  ],
+  "log_effects": [
+    {"service": "checkout", "level": "ERROR", "start": "14:00", "per_min": [16, 24], "upstream": "inventory",
+     "message": "stock check failed for order {id}: TLS handshake with inventory.shopco.internal failed: x509: certificate has expired"},
+    {"service": "checkout", "level": "WARN", "start": "14:00", "per_min": [4, 8], "upstream": "inventory",
+     "message": "inventory unavailable, blocking order {id} (no stock confirmation)"}
+  ],
+  "ground_truth": {
+    "root_cause": "Inventory's TLS certificate expired at 14:00, so checkout's calls to inventory failed the TLS handshake.",
+    "service": "inventory",
+    "trigger_ts": "14:00:00",
+    "must_mention": [["certificate", "cert", "tls"], ["inventory"]],
+    "expected_action": "Renew the inventory TLS certificate and reload inventory",
+    "runbook": "cert-renewal"
+  }
+}
